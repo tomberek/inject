@@ -1,6 +1,6 @@
 # Inject
 
-Requires a sshloginfile with a list of IPs. We assume you have a passwordless root login available via SSH.
+Requires a `sshloginfile` with a list of IPs. We assume you have a passwordless root login available via SSH.
 
 Example usage:
 ```
@@ -9,4 +9,6 @@ Example usage:
 ./inject 1 -- f1
 ./inject --slf another_sshloginfile {1..20} -- flags*
 ```
+
+Saves results into the `last_run` directory.
 

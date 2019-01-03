@@ -35,15 +35,15 @@ if [ -z "$args" ]; then
     args='f*'
 fi
 if [ ${#POSITIONAL[@]} -eq 0 ]; then
-    slf=": $sshloginfile"
+    slf=`cat $sshloginfile`
 else
     output="$(IFS=$'\n' ; echo "${POSITIONAL[*]}")"
     slf=" $(awk 'FNR==NR{a[NR]=$0;next}{print a[$0]}' \
         "$sshloginfile" <(printf "%s\n" "$output"))"
 fi
-parallel --results last_run parallel -I {] --arg-sep ,, --tag -j1 --tagstr {1} --controlmaster \
-    -S root@{1} --wd ...  \
-    --transferfile {1] \
-    make -s -C {1] {1] MACHINE={1} ,, $args :::$slf
-
-
+slf_a=( root@{$(echo -n $slf | tr ' ' ',')} )
+slf_a="$( eval echo $slf_a | tr ' ' ',')"
+parallel --results last_run -j1 --tagstr {2} --controlmaster \
+    -S $slf_a --wd ...  \
+    --transferfile {1} \
+    make -s -C {1} {1} MACHINE={2} ::: $args ::: $slf
