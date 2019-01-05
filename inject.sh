@@ -1,23 +1,58 @@
 #!/usr/bin/env bash
 POSITIONAL=()
 sshloginfile="sshloginfile"
+VERBOSE=
+RESULTS=last_run
+WORKINGDIR=
 while true; do
     case "$1" in 
-    -h|--help|-v)
-        echo 'Usage: inject.sh [--slf sshloginfile] [machine_indices] [-- [flag_indices]]'
-        echo '    runs make in [flag_indices] directories'
-        echo '    uses parallel to ssh onto machines defined in sshloginfile'
-        echo '    make target is flag name, envvar MACHINE is the line from sshloginfile'
-        echo '    ommiting the machine_indices uses the entire file'
-        echo 'Example: inject.sh {1..2} -- f*'
+    -h|--help)
+        echo 'Usage:'
+        echo '  inject.sh [--slf sshloginfile] [machine_indices] [::: flag_directories [::: make_targets]]'
+        echo ''
+        echo '    Inject runs make in the [flag_directories] on target machines'
+        echo '    uses GNU parallel to ssh onto machines using jump hosts defined in sshloginfile'
+        echo '    and to target specified by [flag_directories]/target'
+        echo ''
+        echo 'Options:'
+        echo '  -h --help       Show this help'
+        echo '  -v --verbose    Show verbose runs of parallel'
+        echo '  --slf file      Override sshloginfile [default: ./sshloginfile]'
+        echo '  -r results_dir  Set path to store results in'
+        echo '  -C dir          Set working directory, also applies to relative results'
+        echo ''
+        echo '    machine_indices: 1-indexed list to use [default: uses entire sshloginfile]'
+        echo '    flag_directories: flag directories [default: all in working dir except results_dir]'
+        echo '    make_targets: a list of make targets to call [default: default]'
+        echo ''
+        echo 'Makefile env vars:'
+        echo '    MACHINE: the line from sshloginfile'
+        echo '    FLAG: the flag'
+        echo ''
+        echo 'Example: inject.sh {1..2} ::: f*'
         echo 'Version: 0.1'
         exit
         ;;
-    --slf)
-        sshloginfile="$1"
+    -v|--verbose)
+        VERBOSE="-v"
         shift
         ;;
-    --)
+    -r|--results)
+        RESULTS="$2"
+        shift
+        shift
+        ;;
+    -C)
+        WORKINGDIR="$2"
+        shift
+        shift
+        ;;
+    --slf)
+        sshloginfile="$2"
+        shift
+        shift
+        ;;
+    :::|:::+|::::|::::+)
         shift
         break
         ;;
@@ -30,20 +65,29 @@ while true; do
         ;;
     esac
 done
+
+if [ -n "$WORKINGDIR" ]; then
+    pushd "$WORKINGDIR" >/dev/null
+fi
 args="$@"
 if [ -z "$args" ]; then
-    args='f*'
+    args=`find * -maxdepth 0 -not -path "$RESULTS" -not -path '*/\.*' -type d`
+    echo "Using $(echo $args | tr '\n' ' ')" >&2
 fi
 if [ ${#POSITIONAL[@]} -eq 0 ]; then
-    slf=`cat $sshloginfile`
+    slf="`cat $sshloginfile`"
 else
-    output="$(IFS=$'\n' ; echo "${POSITIONAL[*]}")"
-    slf=" $(awk 'FNR==NR{a[NR]=$0;next}{print a[$0]}' \
-        "$sshloginfile" <(printf "%s\n" "$output"))"
+    slf=`echo ${POSITIONAL[@]} | tr ' ' '\n' | sort | join -j1 <(nl $sshloginfile) - | cut -d' ' -f2-`
 fi
-slf_a=( root@{$(echo -n $slf | tr ' ' ',')} )
-slf_a="$( eval echo $slf_a | tr ' ' ',')"
-parallel --results last_run -j1 --tagstr {2} --controlmaster \
-    -S $slf_a --wd ...  \
-    --transferfile {1} \
-    make -s -C {1} {1} MACHINE={2} ::: $args ::: $slf
+printf %s\\n "$slf" | \
+    ( printf %s\\n target,flag,maketarget  ; parallel -a - "parallel -I {] echo ssh -J root@{1} root@{1],{2},{3} :::: {2}/target" ::: $args ) | \
+    parallel -j+0 --header : --results "$RESULTS" -M $VERBOSE -a - --colsep , \
+        "parallel $VERBOSE -j1 -n0 -M -S {target} --transferfile {flag} --wd ... make -s -C {flag} {maketarget} MACHINE='{target}' FLAG='{flag}' ::: 1"
+
+    # Beginings of attempt to fuse the parallel calls
+    #( parallel -a - "parallel -I {] echo ssh -J root@{1} root@{1] :::: {2}/target" ::: $args ) | \
+    #parallel --results "$RESULTS" $VERBOSE --header : -M -j0 --onall --transferfile . --slf - --wd ... make -s -C {1} FLAG={1} ::: flag $args
+
+if [ -n "$WORKINGDIR" ]; then
+    popd >/dev/null
+fi

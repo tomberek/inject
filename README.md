@@ -1,5 +1,9 @@
 # Inject
 
+Run collections of makefiles on remote machines.
+
+## Usage
+
 Requires a `sshloginfile` with a list of IPs. We assume you have a passwordless root login available via SSH.
 
 Example usage:
@@ -12,3 +16,6 @@ Example usage:
 
 Saves results into the `last_run` directory.
 
+## Dependencies
+
+parallel, make, envsubst

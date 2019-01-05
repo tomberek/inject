@@ -1,0 +1,2 @@
+default:
+	echo flag1
