@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
+
+# Defaults
 POSITIONAL=()
 sshloginfile="sshloginfile"
 VERBOSE=
 RESULTS=last_run
 WORKINGDIR=
 REMOTE="-S {target} --transferfile {flag} --wd ..." 
+
 while true; do
     case "$1" in 
     -h|--help)
@@ -72,19 +75,26 @@ while true; do
     esac
 done
 
+# Jump to working directory
 if [ -n "$WORKINGDIR" ]; then
     pushd "$WORKINGDIR" >/dev/null
 fi
+
+# Default behavior when no specifying flags_directories
 args="$@"
 if [ -z "$args" ]; then
     args=`find * -maxdepth 0 -not -path "$RESULTS" -not -path '*/\.*' -type d`
     echo "Using $(echo $args | tr '\n' ' ')" >&2
 fi
+
+# Default behavior when not specifying machine_ids
 if [ ${#POSITIONAL[@]} -eq 0 ]; then
     slf="`cat $sshloginfile`"
 else
     slf=`echo ${POSITIONAL[@]} | tr ' ' '\n' | sort | join -j1 <(nl $sshloginfile) - | cut -d' ' -f2-`
 fi
+
+# The core
 printf %s\\n "$slf" | \
     ( printf %s\\n target,flag,maketarget  ; parallel -a - "parallel -I {] echo ssh -J root@{1} root@{1],{2},{3} :::: {2}/target" ::: $args ) | \
     parallel -j+0 --header : --results "$RESULTS" -M $VERBOSE -a - --colsep , \
@@ -94,6 +104,7 @@ printf %s\\n "$slf" | \
     #( parallel -a - "parallel -I {] echo ssh -J root@{1} root@{1] :::: {2}/target" ::: $args ) | \
     #parallel --results "$RESULTS" $VERBOSE --header : -M -j0 --onall --transferfile . --slf - --wd ... make -s -C {1} FLAG={1} ::: flag $args
 
+# Restore original directory
 if [ -n "$WORKINGDIR" ]; then
     popd >/dev/null
 fi
