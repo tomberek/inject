@@ -2,6 +2,10 @@
 
 Run collections of makefiles on remote machines.
 
+# Install
+
+Self-contained in the inject.sh file. Optional to use `sshd_checker.config` if desired.
+
 ## Usage
 
 Requires a `sshloginfile` with a list of IPs. We assume you have a passwordless root login available via SSH.
@@ -65,7 +69,17 @@ parallel, make, envsubst, gawk
 
 Config file at ./sshd_checker.config
 
-### Usage
+### Usage (new)
+JUMPID ::: FLAGDIR ::: STRING
+Compares the contents of `./inject -l JUMPID ::: FLAGDIR ::: check` with STRING
+Attempts to strip .. and force relative path traversal
+
+Example server: `sudo /usr/sbin/sshd -f sshd_checker.config -p 1234`
+Example query : `ssh user@localhost -p 1234 1 ::: f1 ::: some_flag_text`
+
+No results directory needed
+
+### Usage (old)
 JUMPID ::: FLAGDIR ::: STRING
 Compares the contents of last_run/flag/FLAGDIR/target/[JUMP ssh command]/stdout to the STRING
 Attempts to strip .. and force relative path traversal

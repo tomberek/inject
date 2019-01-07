@@ -168,7 +168,7 @@ slf=`echo "$processed" | cut -d$'\035' -f2 | tail -n+2`
 [ -n "$VERBOSE" ] && \
 	printf %s\\n "$variations" | tr $'\034' '-'
 [ -n "$VERBOSE" ] && \
-	printf %s\\n "$processed" | tr $'\034' '-'
+	printf %s\\n "$processed" | tr $'\034' '-' | tr $'\035' '_'
 [ -n "$DRY_RUN" ] && exit
 
 # The core
