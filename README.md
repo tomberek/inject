@@ -15,16 +15,51 @@ Example usage:
 ./inject 1 ::: f2 ::: clean
 ```
 
-Check answers:
+Check answers on local box:
 ```
-./inject -l 1 ::: f2
+./inject -l 1 ::: f2 ::: check
 ```
 
 Saves results into the `last_run` directory.
 
+## Opinionated files
+
+### sshloginfile
+Just a list of IP's which will become the JUMP envvar in the target templates.
+
+### Target
+`flag_dir/target` : the template used to generate the file ssh commands.
+Examples:
+```
+192.168.1.1
+user@192.168.1.1
+ssh -J user@$JUMP another_user@192.168.1.1
+```
+Env Vars:
+`JUMP` : provided via the sshloginfile
+
+### Makefile
+`flag_dir/Makefile` : the template used to generate the file ssh commands. `JUMP` is an envvar available, provided via the sshloginfile
+Examples:
+```
+default:
+        echo "Placing flag into /tmp/${FLAG} on ${MACHINE}"
+        make check > /tmp/${FLAG}
+
+check:
+        echo "SOME RANDOM SALT TEXT ${FLAG} ${MACHINE}" | sha256sum | cut -d" " -f1
+
+clean:
+        rm /tmp/f2 && echo "Removed /tmp/f2"
+
+```
+Env Vars:
+`FLAG` : provided by inject
+`MACHINE` : provided by inject
+
 ## Dependencies
 
-parallel, make, envsubst
+parallel, make, envsubst, gawk
 
 ## SSH-based answer checker
 

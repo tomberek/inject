@@ -42,7 +42,7 @@ while true; do
         echo 'Examples: inject.sh {1..2} ::: f*'
         echo '          inject.sh {1..2} ::: f* ::: default'
         echo '          inject.sh 1 2 :::+ f1'
-        echo 'Version: 0.1'
+        echo 'Version: 0.2'
         exit
         ;;
     -v|--verbose)
@@ -138,7 +138,7 @@ variations=`parallel "echo {1}$'\034'{2}$'\034'{3}" ::: $ids $FIRST_OP $flags $S
 # id jumphost flag maketarget
 # reads $sshloginfile in order to convert machine_id's to use as JUMP
 # in FLAG_DIR/target templating
-processed=`awk -f \
+processed=`gawk -f \
     <(cat <<"EOF"
 BEGIN {
     OFS=FS="\034"
@@ -147,7 +147,7 @@ BEGIN {
 FNR==NR{
     jump[NR]=$0
 }
-FNR!=NR { 
+FNR!=NR{
     getline a < ($2 "/target")
     close($2 "/target")
     ENVIRON["JUMP"]=jump[$1]
@@ -167,15 +167,17 @@ slf=`echo "$processed" | cut -d'/' -f2- | tail -n+2`
 	printf %s\\n "$variations" | tr $'\034' '-'
 [ -n "$VERBOSE" ] && \
 	printf %s\\n "$processed" | tr $'\034' '-'
-[ -n "$DRY_RUN" ] && exit 
+[ -n "$DRY_RUN" ] && exit
 
 # The core
-echo "$newargs" | \
 if [ -z "$REMOTE" ]; then
+    echo "$newargs" | \
+    cut -d'@' -f1 | \
     parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
         --hgrp -j+0 \
         make -s -C {flag} {maketarget} FLAG={flag} MACHINE={machine}
 else
+    echo "$newargs" | \
     parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
         --hgrp -j+0 \
         --slf <(printf %s\\n "$slf") --transferfile . --wd ... \
