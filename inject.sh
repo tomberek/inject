@@ -2,11 +2,15 @@
 
 # Defaults
 POSITIONAL=()
+FLAGS=()
 sshloginfile="sshloginfile"
 VERBOSE=
 RESULTS=last_run
 WORKINGDIR=
-REMOTE="-S {target} --transferfile {flag} --wd ..." 
+REMOTE=1
+FIRST_OP=":::"
+SECOND_OP=":::"
+DRY_RUN=
 
 while true; do
     case "$1" in 
@@ -25,6 +29,7 @@ while true; do
         echo '  -r results_dir  Set path to store results in'
         echo '  -C dir          Set working directory, also applies to relative results'
         echo '  -l|--local      Run makefile locally, good for checking flags'
+        echo '  -d|--dry-run    Dry run, use with --verbose to debug CLI parsing'
         echo ''
         echo '    machine_indices: 1-indexed list to use [default: uses entire sshloginfile]'
         echo '    flag_directories: flag directories [default: all in working dir except results_dir]'
@@ -34,7 +39,9 @@ while true; do
         echo '    MACHINE: the line from sshloginfile'
         echo '    FLAG: the flag'
         echo ''
-        echo 'Example: inject.sh {1..2} ::: f*'
+        echo 'Examples: inject.sh {1..2} ::: f*'
+        echo '          inject.sh {1..2} ::: f* ::: default'
+        echo '          inject.sh 1 2 :::+ f1'
         echo 'Version: 0.1'
         exit
         ;;
@@ -45,6 +52,10 @@ while true; do
     -r|--results)
         RESULTS="$2"
         shift
+        shift
+        ;;
+    -d|--dry-run)
+        DRY_RUN=1
         shift
         ;;
     -l|--local)
@@ -62,6 +73,7 @@ while true; do
         shift
         ;;
     :::|:::+|::::|::::+)
+		FIRST_OP="$1"
         shift
         break
         ;;
@@ -70,39 +82,105 @@ while true; do
         ;;
     *)
         POSITIONAL+=("$1")
+		shift
+		;;
+	esac
+done
+
+while true; do
+    case "$1" in 
+    :::|:::+|::::|::::+)
+		SECOND_OP="$1"
         shift
+        break
         ;;
+    "")
+        break
+        ;;
+    *)
+        FLAGS+=("$1")
+		shift
+		;;
     esac
 done
+args="$@"
 
 # Jump to working directory
 if [ -n "$WORKINGDIR" ]; then
     pushd "$WORKINGDIR" >/dev/null
 fi
 
-# Default behavior when no specifying flags_directories
-args="$@"
-if [ -z "$args" ]; then
-    args=`find * -maxdepth 0 -not -path "$RESULTS" -not -path '*/\.*' -type d`
-    echo "Using $(echo $args | tr '\n' ' ')" >&2
-fi
-
 # Default behavior when not specifying machine_ids
 if [ ${#POSITIONAL[@]} -eq 0 ]; then
-    slf="`cat $sshloginfile`"
+	ids=`wc -l "$sshloginfile" | cut -d' ' -f1`
+	ids=`seq 1 $ids`
+    echo "Default machines: $(echo $ids | tr '\n' ' ')" >&2
 else
-    slf=`echo ${POSITIONAL[@]} | tr ' ' '\n' | sort | join -j1 <(nl $sshloginfile) - | cut -d' ' -f2-`
+	ids="${POSITIONAL[@]}"
 fi
 
-# The core
-printf %s\\n "$slf" | \
-    ( printf %s\\n target,flag,maketarget  ; parallel -a - "parallel -I {] echo ssh -J root@{1} root@{1],{2},{3} :::: {2}/target" ::: $args ) | \
-    parallel -j+0 --header : --results "$RESULTS" -M $VERBOSE -a - --colsep , \
-        "parallel $VERBOSE -j1 -n0 -M $REMOTE make -s -C {flag} {maketarget} MACHINE='{target}' FLAG='{flag}' ::: 1"
+# Default behavior when not specifying flags_directories
+if [ "${#FLAGS[@]}" -eq 0 ]; then
+    flags=`find * -maxdepth 0 -not -path "$RESULTS" -not -path '*/\.*' -type d`
+    echo "Default flags: $(echo $flags | tr '\n' ' ')" >&2
+else
+	flags="${FLAGS[@]}"
+fi
 
-    # Beginings of attempt to fuse the parallel calls
-    #( parallel -a - "parallel -I {] echo ssh -J root@{1} root@{1] :::: {2}/target" ::: $args ) | \
-    #parallel --results "$RESULTS" $VERBOSE --header : -M -j0 --onall --transferfile . --slf - --wd ... make -s -C {1} FLAG={1} ::: flag $args
+# Default behavior when not specifying maketargets
+if [ -z "$args" ]; then
+	args="default"
+fi
+
+variations=`parallel "echo {1}$'\034'{2}$'\034'{3}" ::: $ids $FIRST_OP $flags $SECOND_OP $args`
+
+# Takes all variations and processes them into:
+# id jumphost flag maketarget
+# reads $sshloginfile in order to convert machine_id's to use as JUMP
+# in FLAG_DIR/target templating
+processed=`awk -f \
+    <(cat <<"EOF"
+BEGIN {
+    OFS=FS="\034"
+    print "flag","machine","maketarget"
+}
+FNR==NR{
+    jump[NR]=$0
+}
+FNR!=NR { 
+    getline a < ($2 "/target")
+    close($2 "/target")
+    ENVIRON["JUMP"]=jump[$1]
+    print a |& "envsubst"
+    close("envsubst","to")
+    "envsubst" |& getline b
+    close("envsubst")
+    print $2,$1,$3 "@" $2,$1 "/@" $2,$1 "/1/" b
+}
+EOF
+) $sshloginfile <(printf %s "$variations")`
+
+newargs=`echo "$processed" | cut -d'/' -f1`
+slf=`echo "$processed" | cut -d'/' -f2- | tail -n+2`
+
+[ -n "$VERBOSE" ] && \
+	printf %s\\n "$variations" | tr $'\034' '-'
+[ -n "$VERBOSE" ] && \
+	printf %s\\n "$processed" | tr $'\034' '-'
+[ -n "$DRY_RUN" ] && exit 
+
+# The core
+echo "$newargs" | \
+if [ -z "$REMOTE" ]; then
+    parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
+        --hgrp -j+0 \
+        make -s -C {flag} {maketarget} FLAG={flag} MACHINE={machine}
+else
+    parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
+        --hgrp -j+0 \
+        --slf <(printf %s\\n "$slf") --transferfile . --wd ... \
+        make -s -C {flag} {maketarget} FLAG={flag} MACHINE={machine}
+fi
 
 # Restore original directory
 if [ -n "$WORKINGDIR" ]; then

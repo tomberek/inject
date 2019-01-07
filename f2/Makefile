@@ -1,6 +1,6 @@
 default: 
 	echo "Placing flag into /tmp/${FLAG} on ${MACHINE}"
-	make check > /tmp/f2
+	make check > /tmp/${FLAG}
 
 check:
 	echo "SOME RANDOM SALT AND STUDENT SPECIFICS ${FLAG} ${MACHINE}" | sha256sum | cut -d" " -f1
