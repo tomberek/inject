@@ -177,13 +177,13 @@ if [ -z "$REMOTE" ]; then
     cut -d'@' -f1 | \
     parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
         --hgrp -j+0 \
-        make -s -C {flag} {maketarget} FLAG={flag} MACHINE={machine}
+        make -s -C {flag} {maketarget} FLAG={flag/} MACHINE={machine}
 else
     echo "$newargs" | \
     parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
         --hgrp -j+0 \
         --slf <(printf %s\\n "$slf") --transferfile . --wd ... \
-        make -s -C {flag} {maketarget} FLAG={flag} MACHINE={machine}
+        make -s -C {flag} {maketarget} FLAG={flag/} MACHINE={machine}
 fi
 
 # Restore original directory
