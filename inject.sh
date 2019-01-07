@@ -16,7 +16,7 @@ while true; do
     case "$1" in 
     -h|--help)
         echo 'Usage:'
-        echo '  inject.sh [--slf sshloginfile] [machine_indices] [::: flag_directories [::: make_targets]]'
+        echo '  inject.sh [options] [--slf sshloginfile] [machine_indices] [::: flag_directories [::: make_targets]]'
         echo ''
         echo '    Inject runs make in the [flag_directories] on target machines'
         echo '    uses GNU parallel to ssh onto machines using jump hosts defined in sshloginfile'
@@ -35,9 +35,10 @@ while true; do
         echo '    flag_directories: flag directories [default: all in working dir except results_dir]'
         echo '    make_targets: a list of make targets to call [default: default]'
         echo ''
-        echo 'Makefile env vars:'
-        echo '    MACHINE: the line from sshloginfile'
-        echo '    FLAG: the flag'
+        echo 'Env vars:'
+        echo '    MACHINE: the machine index in use [ in flag_dir/Makefile]'
+        echo '    FLAG: the flag directory in use [ in flag_dir/Makefile]'
+        echo '    JUMP: populated by sshloginfile [ in flag_dir/target]'
         echo ''
         echo 'Examples: inject.sh {1..2} ::: f*'
         echo '          inject.sh {1..2} ::: f* ::: default'
