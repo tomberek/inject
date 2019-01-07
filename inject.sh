@@ -149,6 +149,7 @@ FNR==NR{
     jump[NR]=$0
 }
 FNR!=NR{
+    $2 = gensub(/\.\./,"","g",$2)
     getline a < ($2 "/target")
     close($2 "/target")
     ENVIRON["JUMP"]=jump[$1]
@@ -156,13 +157,13 @@ FNR!=NR{
     close("envsubst","to")
     "envsubst" |& getline b
     close("envsubst")
-    print $2,$1,$3 "@" $2,$1 "/@" $2,$1 "/1/" b
+    print $2,$1,$3 "@" $2,$1 "\035@" $2,$1 "/1/" b
 }
 EOF
 ) $sshloginfile <(printf %s "$variations")`
 
-newargs=`echo "$processed" | cut -d'/' -f1`
-slf=`echo "$processed" | cut -d'/' -f2- | tail -n+2`
+newargs=`echo "$processed" | cut -d$'\035' -f1`
+slf=`echo "$processed" | cut -d$'\035' -f2 | tail -n+2`
 
 [ -n "$VERBOSE" ] && \
 	printf %s\\n "$variations" | tr $'\034' '-'
