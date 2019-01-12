@@ -3,7 +3,7 @@
 # Defaults
 POSITIONAL=()
 FLAGS=()
-sshloginfile="sshloginfile"
+sshloginfile="./sshloginfile"
 VERBOSE=
 RESULTS=last_run
 WORKINGDIR=
@@ -105,6 +105,7 @@ while true; do
     esac
 done
 args="$@"
+sshloginfile="$(realpath "$sshloginfile")"
 
 # Jump to working directory
 if [ -n "$WORKINGDIR" ]; then
@@ -139,7 +140,7 @@ variations=`parallel "echo {1}$'\034'{2}$'\034'{3}" ::: $ids $FIRST_OP $flags $S
 # id jumphost flag maketarget
 # reads $sshloginfile in order to convert machine_id's to use as JUMP
 # in FLAG_DIR/target templating
-processed=`gawk '
+processed="$(gawk '
 BEGIN {
     OFS=FS="\034"
     print "flag","machine","maketarget"
@@ -156,16 +157,19 @@ FNR!=NR{
     close("envsubst","to")
     "envsubst" |& getline b
     close("envsubst")
-    print $2,$1,$3 "@" $2,$1 "\035@" $2,$1 "/1/" b
-}' $sshloginfile <(printf %s "$variations")`
+    hostgroup = $2 OFS $1 OFS $3
+    hostgroup = gensub(/\//,"","g",hostgroup)
+    print "@" hostgroup "/1/" b
+    print $2,$1,$3 "@" hostgroup
+}' "$sshloginfile" <(printf %s "$variations"))"
 
-newargs=`echo "$processed" | cut -d$'\035' -f1`
-slf=`echo "$processed" | cut -d$'\035' -f2 | tail -n+2`
+newargs=`echo "$processed" | awk 'NR%2==1'`
+slf=`echo "$processed" | awk 'NR%2==0'`
 
 [ -n "$VERBOSE" ] && \
-	printf %s\\n "$variations" | tr $'\034' '-'
+	printf %s\\n "$newargs" | tr $'\034' '-'
 [ -n "$VERBOSE" ] && \
-	printf %s\\n "$processed" | tr $'\034' '-' | tr $'\035' '_'
+	printf %s\\n "$slf" | tr $'\034' '-' | tr $'\035' '_'
 [ -n "$DRY_RUN" ] && exit
 
 # The core
@@ -173,12 +177,12 @@ if [ -z "$REMOTE" ]; then
     echo "$newargs" | \
     cut -d'@' -f1 | \
     parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
-        --hgrp -j+0 \
+        --hgrp -j1 \
         make -s -C {flag} {maketarget} FLAG={flag/} MACHINE={machine}
 else
     echo "$newargs" | \
     parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
-        --hgrp -j+0 \
+        --hgrp -j1 \
         --slf <(printf %s\\n "$slf") --transferfile . --wd ... \
         make -s -C {flag} {maketarget} FLAG={flag/} MACHINE={machine}
 fi
