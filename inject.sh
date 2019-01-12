@@ -150,17 +150,18 @@ FNR==NR{
 }
 FNR!=NR{
     $2 = gensub(/\.\./,"","g",$2)
-    getline a < ($2 "/target")
+    while(( getline a < ($2 "/target")) >0 ){
+        ENVIRON["JUMP"]=jump[$1]
+        print a |& "envsubst"
+        close("envsubst","to")
+        "envsubst" |& getline b
+        close("envsubst")
+        hostgroup = $2 OFS $1 OFS $3
+        hostgroup = gensub(/\//,"","g",hostgroup)
+        print "@" hostgroup "/1/" b
+        print $2,$1,$3 "@" hostgroup
+    }
     close($2 "/target")
-    ENVIRON["JUMP"]=jump[$1]
-    print a |& "envsubst"
-    close("envsubst","to")
-    "envsubst" |& getline b
-    close("envsubst")
-    hostgroup = $2 OFS $1 OFS $3
-    hostgroup = gensub(/\//,"","g",hostgroup)
-    print "@" hostgroup "/1/" b
-    print $2,$1,$3 "@" hostgroup
 }' "$sshloginfile" <(printf %s "$variations"))"
 
 newargs=`echo "$processed" | awk 'NR%2==1'`
