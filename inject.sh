@@ -139,8 +139,7 @@ variations=`parallel "echo {1}$'\034'{2}$'\034'{3}" ::: $ids $FIRST_OP $flags $S
 # id jumphost flag maketarget
 # reads $sshloginfile in order to convert machine_id's to use as JUMP
 # in FLAG_DIR/target templating
-processed=`gawk -f \
-    <(cat <<"EOF"
+processed=`gawk '
 BEGIN {
     OFS=FS="\034"
     print "flag","machine","maketarget"
@@ -158,9 +157,7 @@ FNR!=NR{
     "envsubst" |& getline b
     close("envsubst")
     print $2,$1,$3 "@" $2,$1 "\035@" $2,$1 "/1/" b
-}
-EOF
-) $sshloginfile <(printf %s "$variations")`
+}' $sshloginfile <(printf %s "$variations")`
 
 newargs=`echo "$processed" | cut -d$'\035' -f1`
 slf=`echo "$processed" | cut -d$'\035' -f2 | tail -n+2`
