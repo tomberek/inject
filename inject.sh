@@ -151,7 +151,7 @@ FNR==NR{
 FNR!=NR{
     $2 = gensub(/\.\./,"","g",$2)
     while(( getline a < ($2 "/target")) >0 ){
-        ENVIRON["JUMP"]=jump[$1]
+        ENVIRON["JUMP"]=$1 #jump[$1]
         print a |& "envsubst"
         close("envsubst","to")
         "envsubst" |& getline b
