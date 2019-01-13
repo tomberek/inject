@@ -57,28 +57,18 @@ if [ "$#" -lt "6" ]; then
 fi
 
 # Takes all variations and processes them into arguments
-function go(){
+function go1(){
     local host
     if [ -z "$REMOTE" ]; then
         host=":"
     else
         host=$(printf "$1" | tr -d '/.')
     fi
-    echo "$@" >&2
     printf "$3@$host"
     printf "\t$4@$host"
     printf "\t$1@$host\\n"
 }
-
-export -f go
-# Perl magic is to extract the flag's name
-function run_parallel(){
-    parallel --will-cite --plain go {1} {2} {=2 '$_=::basename(::dirname($opt::a[1]))' =} {3} "$@"
-}
-
-args="$( run_parallel "$@")"
-
-function go(){
+function go2(){
     local host
     local JUMP="$1"
     export JUMP
@@ -90,7 +80,22 @@ function go(){
     fi
     printf "/1/$host\\n" | envsubst
 }
-slf="$(run_parallel "$@")"
+function go(){
+    go1 "$@"
+    go2 "$@"
+}
+export -f go
+export -f go1
+export -f go2
+
+# Perl magic is to extract the flag's name
+function run_parallel(){
+    parallel --will-cite --plain go {1} {2} {=2 '$_=::basename(::dirname($opt::a[1]))' =} {3} "$@"
+}
+
+res="$( run_parallel "$@")"
+args="$( printf %s "$res" | awk 'NR % 2 == 1')"
+slf="$( printf %s "$res" | awk 'NR % 2 == 0')"
 
 [ -n "$VERBOSE" ] && \
 	printf "arguments:\\n%s\\n\\n" "$args" >&2
@@ -107,7 +112,7 @@ arg1=$(echo "$args" | cut -f1)
 arg2=$(echo "$args" | cut -f2)
 arg3=$(echo "$args" | cut -f3)
 
-parallel --hgrp --header : --slf <(printf %s "$slf") \
+parallel --hgrp --slf <(printf %s "$slf") \
     --will-cite -j+0 -k --group -M --sshdelay 0.2 \
     $INJECT_PARALLEL_ARGS $REMOTE $VERBOSE $RESULTS \
     make -s -C {1} {2} FLAG={1/} MACHINE={3} ::: "$(echo "$arg1")" :::+ "$(echo "$arg2")" :::+ "$(echo "$arg3")"
