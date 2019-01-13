@@ -11,7 +11,7 @@ function usage(){
     echo '  -h|--help       Show this help'
     echo '  -v|--verbose    Show verbose runs of parallel'
     echo '  -r results_dir  Set path to store results in'
-    echo '  -C dir          Set working directory, also applies to relative results'
+    echo '  -C dir          Set working directory, must be "greatest common directory" of flags'
     echo '  -l|--local      Run makefile locally, good for checking flags'
     echo '  -d|--dry-run    Dry run, use with --verbose to debug CLI parsing'
     echo ''
@@ -27,13 +27,15 @@ function usage(){
     echo 'Examples: inject.sh ::: {1..2} ::: f* ::: default'
     echo '          inject.sh ::: {1..2} ::: f* ::: default'
     echo '          inject.sh ::: 1 2 :::+ f1 ::: default'
-    echo 'Version: 1.0'
+    echo '          inject.sh -C folder ::: 1 2 ::: folder/f* ::: default'
+    echo 'Version: 1.1'
     exit 0
 }
+
 # Defaults
 VERBOSE=
 RESULTS=last_run
-WORKINGDIR=
+export WORKINGDIR=
 export REMOTE="--transferfile . --wd ..."
 DRY_RUN=
 while getopts r:C:hvdl FLAG; do
@@ -54,22 +56,36 @@ if [ "$#" -lt "6" ]; then
     usage
 fi
 
-# Jump to working directory
-if [ -n "$WORKINGDIR" ]; then
-    pushd "$WORKINGDIR" >/dev/null
-fi
-
 # Takes all variations and processes them into:
 # id jumphost flag maketarget
 # uses the first arg as JUMP
 # in FLAG_DIR/target templating
+
 function go(){
-    printf "$1\034$4\034$5@"
-    printf "$1\034$3\034$5\\n" | tr -d '/'
+    printf "$1\034$3\034$4@"
+    printf "$1\034$3\034$4\\n" | tr -d '/.'
 }
+
+# Function tries to be smart and detect globing from shell, or directories relative to WORKINGDIR
+function get_name(){
+    local file
+    file="$(realpath "$1" 2>/dev/null)"
+    if [ -f "$file" ] ; then
+        printf %s "$file"
+        return
+    fi
+    file="$(realpath "$WORKINGDIR"/"$1" 2>/dev/null)"
+    if [ -f "$file" ] ; then
+        printf %s "$file"
+        return
+    fi
+    echo "Unknown flag folders" >&2
+    exit
+}
+export -f get_name
 export -f go
 function run_parallel(){
-    parallel "parallel -I {] go {1] {2] {2/} {2} {3] ::: {1} :::: {2}/target ::: \$([ -z \"{3}\" ] && echo default || echo {3})" "$@"
+    parallel "parallel -I {] go {1] {2] {2/} {3} ::: {1} :::: \$( get_name {2}/target) " "$@"
 }
 
 args="$(
@@ -80,7 +96,7 @@ args="$(
 function go(){
     local JUMP="$1"
     export JUMP
-    printf "@$1\034$3\034$5" | tr -d '/'
+    printf "@$1\034$3\034$4" | tr -d '/.'
     if [ -z "$REMOTE" ]; then
         host=":"
     else
@@ -96,11 +112,15 @@ slf="$(run_parallel "$@")"
 	printf "slf:\\n%s\\n\\n" "$slf" | tr $'\034' '-' | tr $'\035' '_' >&2
 [ -n "$DRY_RUN" ] && exit
 
+if [ -n "$WORKINGDIR" ]; then
+    pushd "$WORKINGDIR" >/dev/null
+fi
+
 # The core
 echo "$args" | \
-parallel --results "$RESULTS" --header : --colsep $'\034' $VERBOSE -M \
-    --hgrp -j1 \
-    $REMOTE \
+parallel -k --hgrp --results "$RESULTS" --header : --colsep $'\034' \
+    $REMOTE $VERBOSE \
+    -j4 -M \
     --slf <(printf %s\\n "$slf") \
     make -s -C {flag} {maketarget} FLAG={flag/} MACHINE={machine}
 

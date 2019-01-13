@@ -1,1 +1,1 @@
-ssh -J root@$JUMP root@192.168.99.101
+ssh $EXTRAS root@192.168.99.10$JUMP
