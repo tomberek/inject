@@ -5,7 +5,7 @@ if [ "$_"x != "$0"x ]; then
 fi
 function usage(){
     echo 'Usage:'
-    echo '  inject.sh [options] ::: machine_indices :::: flag_targets ::: make_targets'
+    echo '  inject.sh [options] [-n|-o cmd] ::: machine_indices :::: flag_targets ::: make_targets'
     echo ''
     echo '    Inject runs make in the [flag_directories] on target machines'
     echo '    uses GNU parallel to ssh onto machines using hosts defined in flag_directories/target'
@@ -15,11 +15,12 @@ function usage(){
     echo '  -h              Show this help'
     echo '  -v              Show verbose runs of parallel'
     echo '  -s slf          Write ssshloginfile to slf'
-    echo '  -c cmd          Run cmd instead of make'
     echo '  -r results_dir  Set path to store results in'
     echo '  -C dir          Set working directory, must be "greatest common directory" of flags'
     echo '  -l              Run makefile locally, good for checking flags'
     echo '  -d              Dry run, use with --verbose to debug CLI parsing'
+    echo '  -o cmd          Run cmd instead of make, arguments appended or inserted [eg. {n}]'
+    echo '  -n cmd          Run cmd instead of make, no arguments appended'
     echo ''
     echo '    machine_indices: list to use as JUMP variable in the target templates'
     echo '    flag_directories: flag directories [default: all in working dir except results_dir]'
@@ -46,17 +47,35 @@ export REMOTE="--transferfile . --wd ..."
 DRY_RUN=
 SLF=
 CMD="make -s -C {2} {3} FLAG={2/} MACHINE={1}"
+function gobble(){
+    while true; do
+        case ${!OPTIND} in
+            :::) break ;;
+            *) CMD="$CMD ${!OPTIND}"
+                OPTIND=$(( OPTIND +1 ))
+                if [ "$OPTIND" -gt 100 ]; then
+                    echo "Unable to parse" >&2
+                    exit 1
+                fi
+                ;;
+        esac
+    done
+}
 while getopts o:n:s:r:C:hvdl FLAG; do
     case $FLAG in
-        v) VERBOSE="-v" ;;
+        o) CMD="${OPTARG}" 
+            gobble "$@"
+            ;;
+        n) CMD="-N0 ${OPTARG}" 
+            gobble "$@"
+            ;;
         s) SLF="${OPTARG}" ;;
         r) RESULTS="--results ${OPTARG}" ;;
-        o) CMD="${OPTARG}" ;;
-        n) CMD="-N0 ${OPTARG}" ;;
         C) WORKINGDIR="${OPTARG}" ;;
+        h) usage ;;
+        v) VERBOSE="-v" ;;
         d) DRY_RUN="--dry-run" ;;
         l) REMOTE="" ;;
-        h) usage ;;
         *) echo error ; break ;;
     esac
 done
@@ -111,6 +130,7 @@ fi
 
 [ -n "$VERBOSE" ] && printf "arguments:\\n%s\\n\\n" "$args" >&2
 [ -n "$VERBOSE" ] && printf "sshloginfile:\\n%s\\n\\n" "$slf" >&2
+[ -n "$VERBOSE" ] && printf "command:\\n%s\\n\\n" "$CMD" >&2
 [ -n "$DRY_RUN" ] && exit
 
 [ -n "$WORKINGDIR" ] && pushd "$WORKINGDIR" >/dev/null
