@@ -1,0 +1,47 @@
+#!/bin/sh
+true = 0 # Remove warnings
+true + /; exec -a "$0" gawk -f "$0" -v maxcount="$@" -- \/dev\/null ; / { }
+
+function roll(n) { return 1 + int(rand() * n) }
+BEGIN{srand();}
+BEGIN{
+    while((getline line < "/usr/share/rig/fnames-star.idx")>0)
+        names[n++]=line
+    n=0
+    while((getline line < "/usr/share/rig/lnames.idx")>0)
+        lnames[n++]=line
+    n=0
+    while((getline line < "/usr/share/rig/planets.idx")>0)
+        planets[n++]=line
+    n=0
+    while((getline line < "/usr/share/rig/street.idx")>0)
+        street[n++]=line
+}
+function generate(arr){
+    name="" 
+    ind=0
+    n = length(arr)
+    do{
+        ind++ 
+        nr=roll(n)
+        c=substr(arr[nr],ind,1)
+        if(ind>= length(arr[nr])) break
+        name=name c
+    }while(1) 
+    return name
+}
+BEGIN{
+    while(count++ < maxcount){
+        printf "%s %s\n",names[roll(length(names))],generate(lnames)
+        for(i=1;i<=roll(9);i++){
+            printf "%s", roll(9)
+        }
+        printf " %s",generate(street)
+        printf " %s\n",planets[roll(length(planets))]
+        for(i=1;i<=roll(200);i++){
+            #printf("%c",roll(200)+1000)
+            printf("%c",roll(500)+5120)
+        }
+        printf "\n\n"
+    }
+}

@@ -120,7 +120,8 @@ export -f go1
 export -f go2
 
 # Perl magic is to extract the flag's name
-res="$( parallel --will-cite --plain go {1} {2} {=2 '$_=::basename(::dirname($opt::a[1]))' =} {3} "$@" )"
+#res="$( parallel --will-cite --plain go {1} {2} {=2 '$_=::basename(::dirname($opt::a[1]))' =} {3} "$@" )"
+res="$( parallel --will-cite --plain go {1} {2} {=2 '$_=::dirname($opt::a[1])' =} {3} "$@" )"
 args="$( printf %s "$res" | awk 'NR % 2 == 1')"
 slf="$( printf %s "$res" | awk 'NR % 2 == 0')"
 

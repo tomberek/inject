@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# $1 is the root directory to use
+# Execute the lambda (or $2 if given) function via ForceCommand
+
+# Default lambda:
+[ -n "$(type -t lambda)" ] && [ "$(type -t lambda)" = function ] || function lambda(){ 
+    printf %s "$SSH_ORIGINAL_COMMAND" | awk \
+        'BEGIN{
+            dir = "'$1'"
+            FS="[ ]*:::[ ]*|\\.\\.|;|(|)|$"
+        }
+        {
+            cmd = dir "/"$1
+            cmd | getline c
+            print c
+            fflush("/dev/stdout")
+            exit
+        }'
+}
+
+trap "{ rm -f $CONFIG; 
+sudo kill 0 ; }" EXIT
+CONFIG=$(mktemp)
+echo $CONFIG
+declare -f ${1:-lambda}
+cat >> $CONFIG <<EOF
+
+Protocol 2
+AddressFamily inet
+PermitRootLogin without-password
+PasswordAuthentication no 
+PermitEmptyPasswords no
+AllowAgentForwarding no
+AllowTcpForwarding no
+AllowStreamLocalForwarding no
+GatewayPorts no
+PermitTunnel no
+MaxSessions 1
+LogLevel QUIET
+#PermitTTY no
+AllowTcpForwarding no
+UseDNS no
+Port 1234
+
+Match User *
+    AuthorizedKeysCommandUser nobody
+    AuthorizedKeysCommand /bin/echo 'restrict,pty %t %k'
+
+    ForceCommand $(declare -f ${1:-lambda} | awk '{printf "%s",$0}NR>2 && substr($0,length($0),1)!=";"{printf " ; "}' ) ${1:-lambda}
+EOF
+
+set -x
+/usr/sbin/sshd -f $CONFIG -D &
+sleep 1
+rm $CONFIG
+wait
